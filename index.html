@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CMA CGM | Global Logistics & Fleet Tracking</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700;800&family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --cma-blue: #002c5f;
+            --cma-red: #e21e26;
+            --cma-light: #f1f4f8;
+            --link-blue: #007bff;
+            --success-green: #27ae60;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', sans-serif; }
+        body { background: var(--cma-light); color: #1a1a1a; scroll-behavior: smooth; overflow-x: hidden; }
+
+        /* --- ANIMATED SUCCESS TICKER --- */
+        .top-ticker {
+            background: var(--cma-blue); color: white; padding: 12px 0; font-size: 13px; font-weight: 600;
+            overflow: hidden; white-space: nowrap; border-bottom: 2px solid var(--cma-red);
+        }
+        .ticker-move { display: inline-block; animation: ticker 35s linear infinite; }
+        .ticker-move span { margin-right: 60px; }
+        .ticker-move b { color: #4ade80; }
+
+        @keyframes ticker { 0% { transform: translateX(100%); } 100% { transform: translateX(-100%); } }
+
+        /* --- NAVIGATION --- */
+        nav {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 18px 8%; background: white; position: sticky; top: 0; z-index: 1000;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        .logo { font-family: 'Montserrat'; font-weight: 800; font-size: 26px; color: var(--cma-blue); text-decoration: none; }
+        .logo span { color: var(--cma-red); }
+        .nav-links a { text-decoration: none; color: #333; margin-left: 25px; font-weight: 700; font-size: 13px; cursor: pointer; text-transform: uppercase; }
+
+        /* --- VIEW CONTROLLER --- */
+        .page-view { display: none; padding: 50px 8%; animation: fadeIn 0.4s ease-in-out; }
+        .active-view { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* --- HOME HERO --- */
+        .hero {
+            background: linear-gradient(rgba(0,44,95,0.8), rgba(0,44,95,0.7)), 
+                        url('https://images.unsplash.com/photo-1494412519320-aa613dfb7738?q=80&w=1600');
+            background-size: cover; background-position: center;
+            height: 450px; display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; border-radius: 0 0 50px 50px;
+        }
+        .track-card {
+            background: white; padding: 40px; border-radius: 15px; box-shadow: 0 30px 60px rgba(0,0,0,0.2);
+            width: 90%; max-width: 700px; margin-top: -60px; text-align: center;
+        }
+        .track-input { width: 70%; padding: 18px; border: 2px solid #ddd; border-radius: 8px; font-size: 16px; outline: none; }
+        .track-btn { background: var(--cma-red); color: white; border: none; padding: 18px 35px; border-radius: 8px; font-weight: 800; cursor: pointer; }
+
+        /* --- DATA STYLING (SENDER / RECEIVER) --- */
+        .details-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 25px; margin-top: 30px; }
+        .data-box { 
+            background: white; padding: 30px; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.05);
+            border-left: 8px solid var(--cma-blue); position: relative;
+        }
+        .data-box h3 { color: var(--cma-red); font-size: 13px; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 20px; font-weight: 800; }
+        .data-row { margin-bottom: 12px; display: flex; flex-direction: column; }
+        .label { font-size: 11px; font-weight: 700; color: #888; text-transform: uppercase; }
+        .value { font-size: 15px; font-weight: 600; color: #222; margin-top: 3px; }
+        .blue-link { color: var(--link-blue); text-decoration: underline; font-weight: 700; cursor: pointer; }
+
+        /* --- MAP & PROGRESS --- */
+        #map { height: 450px; border-radius: 20px; border: 6px solid white; box-shadow: 0 15px 40px rgba(0,0,0,0.15); margin-top: 30px; z-index: 1; }
+        .bar-container { width: 100%; background: #e0e6ed; height: 14px; border-radius: 20px; margin: 30px 0; overflow: hidden; }
+        .bar-fill { width: 0%; height: 100%; background: linear-gradient(90deg, var(--cma-blue), var(--cma-red)); transition: width 2s ease; }
+
+        /* --- CHATBOT --- */
+        #chat-win { position: fixed; bottom: 100px; right: 30px; width: 330px; height: 480px; background: white; border-radius: 20px; display: none; flex-direction: column; z-index: 3000; box-shadow: 0 25px 50px rgba(0,0,0,0.3); border: 1px solid #eee; overflow: hidden; }
+        .chat-header { background: var(--cma-blue); color: white; padding: 20px; font-weight: 800; font-size: 14px; text-align: center; }
+        .chat-body { flex: 1; padding: 20px; overflow-y: auto; background: #fdfdfd; display: flex; flex-direction: column; gap: 12px; }
+        .msg { padding: 12px 16px; border-radius: 15px; font-size: 13px; line-height: 1.5; max-width: 85%; }
+        .bot { background: #f0f2f5; align-self: flex-start; color: #444; }
+        .user { background: var(--cma-blue); color: white; align-self: flex-end; }
+        .chat-input { display: flex; border-top: 1px solid #eee; }
+        .chat-input input { flex: 1; padding: 18px; border: none; outline: none; }
+
+        footer { background: var(--cma-blue); color: white; padding: 40px 8%; text-align: center; font-size: 13px; }
+
+        @media (max-width: 768px) { .nav-links { display: none; } .track-input { width: 100%; margin-bottom: 10px; } .track-btn { width: 100%; } }
+    </style>
+</head>
+<body>
+
+    <div class="top-ticker">
+        <div class="ticker-move">
+            <span>PKG #8829 Delivered to <b>Seoul, KR</b> <b>[SUCCESS]</b></span>
+            <span>PKG #1104 Delivered to <b>New York, USA</b> <b>[SUCCESS]</b></span>
+            <span>PKG #4492 Delivered to <b>Berlin, DE</b> <b>[SUCCESS]</b></span>
+            <span>Vessel 'CMA MONACO' Arrived at <b>Port of London, UK</b> <b>[STABLE]</b></span>
+            <span>PKG #2273 Delivered to <b>Sydney, AU</b> <b>[SUCCESS]</b></span>
+        </div>
+    </div>
+
+    <nav>
+        <a href="javascript:void(0)" onclick="switchPage('home')" class="logo">CMA <span>CGM</span></a>
+        <div class="nav-links">
+            <a onclick="switchPage('about')">About Us</a>
+            <a onclick="switchPage('logistics')">Logistics</a>
+            <a onclick="switchPage('support')">Support</a>
+        </div>
+    </nav>
+
+    <div id="home" class="page-view active-view" style="padding: 0;">
+        <div class="hero">
+            <h1 style="font-family: Montserrat; font-size: 42px;">Expertise in Global Cargo</h1>
+            <p style="margin-top: 10px; opacity: 0.9;">Professional Door-to-Door Logistics & Freight Management</p>
+        </div>
+        <center>
+            <div class="track-card">
+                <p style="font-weight: 700; color: var(--cma-blue); margin-bottom: 15px;">ENTER CONSIGNMENT NUMBER</p>
+                <input type="text" id="tInput" class="track-input" placeholder="CMA-789-UK">
+                <button class="track-btn" onclick="startTrack()">TRACK CARGO</button>
+            </div>
+        </center>
+        
+        <div style="padding: 80px 8%; text-align: center;">
+            <h2 style="font-family: Montserrat; color: var(--cma-blue);">Global Success Gallery</h2>
+            <div class="details-grid">
+                <img src="https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?q=80&w=400" style="width:100%; border-radius:15px; height:200px; object-fit:cover;">
+                <img src="https://images.unsplash.com/photo-1494412519320-aa613dfb7738?q=80&w=400" style="width:100%; border-radius:15px; height:200px; object-fit:cover;">
+                <img src="https://images.unsplash.com/photo-1578575437130-527eed3abbec?q=80&w=400" style="width:100%; border-radius:15px; height:200px; object-fit:cover;">
+            </div>
+        </div>
+    </div>
+
+    <div id="tracking-result" class="page-view">
+        <h2 style="color: var(--cma-blue); font-family: Montserrat;">Tracking ID: <span style="color: var(--cma-red);">CMA-789-UK-2025</span></h2>
+        <div class="bar-container"><div class="bar-fill" id="pBar"></div></div>
+        <p style="text-align: right; font-weight: 800; color: var(--success-green);">CURRENT STATUS: IN TRANSIT (80%)</p>
+
+        <div class="details-grid">
+            <div class="data-box">
+                <h3>Consignor (Sender)</h3>
+                <div class="data-row"><span class="label">Full Name</span><span class="value">Min Jun</span></div>
+                <div class="data-row"><span class="label">Origin Address</span><span class="value">17 Fulham, London, United Kingdom</span></div>
+                <div class="data-row"><span class="label">Contact Phone</span><span class="value"><a href="tel:+447985293148" class="blue-link">+44 7985 293148</a></span></div>
+                <div class="data-row"><span class="label">Official Email</span><span class="value"><a href="mailto:mjun2327@gmail.com" class="blue-link">mjun2327@gmail.com</a></span></div>
+            </div>
+            <div class="data-box" style="border-left-color: var(--cma-red);">
+                <h3>Consignee (Receiver)</h3>
+                <div class="data-row"><span class="label">Full Name</span><span class="value">Maria Luise</span></div>
+                <div class="data-row"><span class="label">Destination Address</span><span class="value">Meta Police Command, Cl. 44 #35b-29, Villavicencio, Colombia</span></div>
+                <div class="data-row"><span class="label">Contact Phone</span><span class="value"><a href="tel:+57808945630" class="blue-link">+57 808 945630</a></span></div>
+                <div class="data-row"><span class="label">Official Email</span><span class="value"><a href="mailto:maria699@gmail.com" class="blue-link">maria699@gmail.com</a></span></div>
+            </div>
+        </div>
+        
+        <h3 style="margin-top: 50px; color: var(--cma-blue); font-family: Montserrat;">Live Geographical Transit Map</h3>
+        <div id="map"></div>
+    </div>
+
+    <div id="about" class="page-view">
+        <h1 style="color: var(--cma-blue); font-family: Montserrat;">About CMA CGM Group</h1>
+        <p style="margin-top: 20px; line-height: 1.8;">Founded in 1978, CMA CGM is a global leader in shipping and logistics. With a presence in 160 countries through 755 offices, we are committed to the energy transition and decarbonization of the maritime industry. Our fleet of 580 vessels serves 420 of the world's 521 commercial ports.</p>
+        <img src="https://images.unsplash.com/photo-1512413316925-fd4b93f31521?q=80&w=800" style="width:100%; border-radius:20px; margin-top:30px;">
+    </div>
+
+    <div id="logistics" class="page-view">
+        <h1 style="color: var(--cma-blue); font-family: Montserrat;">Logistics Management</h1>
+        <div class="data-box" style="margin-top: 30px; display: flex; align-items: center; gap: 30px; flex-wrap: wrap;">
+            <img src="https://images.unsplash.com/photo-1560250097-0b93528c311a?q=80&w=200" style="width: 150px; height: 150px; border-radius: 50%; object-fit: cover;">
+            <div>
+                <h2 style="color: var(--cma-red);">David Richardson</h2>
+                <p><b>Senior Director of International Logistics</b></p>
+                <p style="margin-top: 10px;">Overseeing over 500,000 TEUs of cargo movement annually. Direct management of the UK to Colombia maritime corridor.</p>
+            </div>
+        </div>
+    </div>
+
+    <div id="support" class="page-view">
+        <h1 style="color: var(--cma-blue); font-family: Montserrat;">Customer Complaint Center</h1>
+        <p style="margin: 20px 0;">Official Support Email: <a href="mailto:officialcmashipping@gmail.com" class="blue-link">officialcmashipping@gmail.com</a></p>
+        <p>Support Hotline: <a href="tel:+5214426759318" class="blue-link">+52 1 442 675 9318</a></p>
+        
+        <div style="margin-top: 40px; background: white; padding: 40px; border-radius: 15px;">
+            <input type="text" placeholder="Full Name" style="width:100%; padding:15px; margin-bottom:10px; border:1px solid #ddd; border-radius:5px;">
+            <textarea placeholder="Describe your complaint..." style="width:100%; padding:15px; height:150px; border:1px solid #ddd; border-radius:5px;"></textarea>
+            <button class="track-btn" style="width:100%;" onclick="alert('Sent Successfully. Reference ID: #99321')">SUBMIT COMPLAINT</button>
+        </div>
+    </div>
+
+    <footer>
+        <p>&copy; 2025 CMA CGM GROUP. Head Office: Marseille, France. Global Logistics Partners.</p>
+    </footer>
+
+    <div id="chat-win">
+        <div class="chat-header">CMA AI ASSISTANT</div>
+        <div id="chat-body" class="chat-body">
+            <div class="msg bot">Hello. I am the CMA Intelligent Bot. How can I help you today?</div>
+        </div>
+        <div class="chat-input"><input type="text" id="cInp" placeholder="Type message..." onkeypress="handleChat(event)"></div>
+    </div>
+    <div onclick="toggleChat()" style="position: fixed; bottom: 30px; right: 30px; background: var(--cma-blue); color: white; width: 65px; height: 65px; border-radius: 50%; display: flex; justify-content: center; align-items: center; cursor: pointer; font-size: 30px; z-index: 4000; box-shadow: 0 10px 30px rgba(0,0,0,0.3);">💬</div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // --- NAVIGATION & TRACKING ---
+        function switchPage(id) {
+            document.querySelectorAll('.page-view').forEach(v => v.classList.remove('active-view'));
+            document.getElementById(id).classList.add('active-view');
+            window.scrollTo(0,0);
+        }
+
+        let mapObj = null;
+        function startTrack() {
+            const input = document.getElementById('tInput').value.trim();
+            if(!input) return alert("Please enter a valid Reference ID.");
+            switchPage('tracking-result');
+            setTimeout(() => { document.getElementById('pBar').style.width = '80%'; }, 500);
+            if(!mapObj) {
+                mapObj = L.map('map').setView([4.142, -73.626], 13);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(mapObj);
+                L.marker([4.142, -73.626]).addTo(mapObj).bindPopup('<b>CMA Cargo Hub</b>').openPopup();
+            }
+        }
+
+        // --- AUTO AI & DATA CAPTURE ENGINE ---
+        function toggleChat() {
+            const win = document.getElementById('chat-win');
+            win.style.display = (win.style.display === 'flex') ? 'none' : 'flex';
+        }
+
+        function handleChat(e) {
+            if(e.key === 'Enter') {
+                const input = document.getElementById('cInp');
+                const body = document.getElementById('chat-body');
+                const userMsg = input.value.trim();
+                if(!userMsg) return;
+
+                body.innerHTML += `<div class="msg user">${userMsg}</div>`;
+                input.value = '';
+                body.scrollTop = body.scrollHeight;
+
+                // Show AI processing
+                const tid = "ai-" + Date.now();
+                body.innerHTML += `<div class="msg bot" id="${tid}"><i>Processing...</i></div>`;
+                body.scrollTop = body.scrollHeight;
+
+                setTimeout(() => {
+                    const botDiv = document.getElementById(tid);
+                    processAiResponse(userMsg, botDiv, body);
+                }, 1000);
+            }
+        }
+
+        function processAiResponse(msg, botDiv, body) {
+            const text = msg.toLowerCase();
+            let reply = "";
+
+            // 1. DATA CAPTURE LOGIC (Detecting Phone/Email)
+            const phoneRegex = /(\+?\d{1,4}?[\s-]?)?\(?\d{3}\)?[\s-]?\d{3}[\s-]?\d{4}/g;
+            const emailRegex = /\S+@\S+\.\S+/g;
+            
+            if (phoneRegex.test(text) || emailRegex.test(text)) {
+                // This captures the info and prepares a mailto link
+                // REPLACE YOUR_EMAIL@GMAIL.COM below with your actual email
+                reply = "I have noted your contact details for our records. Would you like me to prioritize your ticket with an agent? <br><br><a href='mailto:YOUR_EMAIL@GMAIL.COM?subject=Urgent Support Request&body=Customer Message: " + encodeURIComponent(msg) + "' class='blue-link' style='background:#e21e26; color:white; padding:5px 10px; border-radius:5px; text-decoration:none;'>Confirm & Send to Agent</a>";
+                botDiv.innerHTML = reply;
+                return;
+            }
+
+            // 2. CONTEXTUAL AI REPLY
+            if (text.includes("track") || text.includes("where")) {
+                reply = "Tracking Update: Shipment <b>CMA-789-UK</b> is currently at the <b>Villavicencio Terminal</b>. Processing status: Final Mile Delivery.";
+            } else if (text.includes("agent") || text.includes("human") || text.includes("talk")) {
+                reply = "<b>System:</b> Agent 'Sarah W.' is joining... <br> Sarah: Hello! I've reviewed your chat history. How can I help you personally?";
+            } else if (text.includes("hello") || text.includes("hi")) {
+                reply = "Welcome to CMA Support. I am your automated assistant. You can provide your tracking number or contact info to begin.";
+            } else {
+                reply = "I've analyzed your query. To assist you better, please provide your <b>Phone Number</b> or <b>Tracking ID</b> so our team can contact you.";
+            }
+
+            botDiv.innerHTML = reply;
+            body.scrollTop = body.scrollHeight;
+        }
+    </script>
+</body>
+</html>
